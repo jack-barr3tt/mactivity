@@ -1,4 +1,4 @@
-.PHONY: agent generate-backend lint-api lint-agent lint test dev stop-tmux mcp
+.PHONY: agent generate-backend lint-api lint-agent lint test dev stop stop-tmux mcp
 
 OAPI_CODEGEN_VERSION ?= v2.8.0
 AIR_VERSION ?= v1.62.0
@@ -45,6 +45,8 @@ dev: agent
 		tmux send-keys -t $(TMUX_SESSION):api 'cd api && go run github.com/air-verse/air@$(AIR_VERSION)' C-m; \
 	fi
 	@if [ -z "$$TMUX" ]; then tmux attach -t $(TMUX_SESSION); fi
+
+stop: stop-tmux
 
 stop-tmux:
 	-tmux kill-session -t $(TMUX_SESSION)

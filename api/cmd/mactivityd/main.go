@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jack-barr3tt/mactivity/api/internal/auth"
 	"github.com/jack-barr3tt/mactivity/api/internal/mcp"
 	"github.com/jack-barr3tt/mactivity/api/internal/server"
 	"github.com/jack-barr3tt/mactivity/api/internal/store"
@@ -56,12 +58,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	app := server.NewApp(db)
+	issuer, err := auth.Open(filepath.Dir(path))
+	if err != nil {
+		slog.Error("oauth", "err", err)
+		os.Exit(1)
+	}
+	defer func() { _ = issuer.Close() }()
+
+	app := server.NewApp(db, issuer)
 	mcpHTTP := &http.Server{
 		Addr: *mcpAddr,
-		Handler: sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
+		Handler: issuer.Handler(sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
 			return mcpServer.MCP()
-		}, nil),
+		}, nil)),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

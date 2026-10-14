@@ -3,20 +3,51 @@ package server
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 
 	api "github.com/jack-barr3tt/mactivity/api/gen"
+	"github.com/jack-barr3tt/mactivity/api/internal/auth"
 	"github.com/jack-barr3tt/mactivity/api/internal/store"
 )
 
-func NewApp(st *store.Store) *fiber.App {
+func NewApp(st *store.Store, tokens auth.Checker) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: jsonError,
 	})
+	app.Use(requireBearer(tokens))
 	api.RegisterHandlers(app, New(st))
 	return app
+}
+
+func requireBearer(tokens auth.Checker) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		token, ok := bearerToken(c.Get("Authorization"))
+		if !ok {
+			c.Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+			return c.Status(http.StatusUnauthorized).JSON(api.Error{Message: "unauthorized"})
+		}
+		err := tokens.Check(token)
+		if errors.Is(err, auth.ErrInsufficientScope) {
+			c.Set("WWW-Authenticate", `Bearer error="insufficient_scope", scope="`+auth.Scope+`"`)
+			return c.Status(http.StatusForbidden).JSON(api.Error{Message: "insufficient scope"})
+		}
+		if err != nil {
+			c.Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+			return c.Status(http.StatusUnauthorized).JSON(api.Error{Message: "unauthorized"})
+		}
+		return c.Next()
+	}
+}
+
+func bearerToken(header string) (string, bool) {
+	parts := strings.Fields(header)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
+		return "", false
+	}
+	return parts[1], true
 }
 
 func jsonError(c fiber.Ctx, err error) error {

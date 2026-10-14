@@ -5,8 +5,11 @@ info:
   description: |
     Query the local activity log. Windows are half-open: a segment counts when it overlaps [from, to).
     Duration uses the overlap only, clipped to that window. An open segment is treated as ending at the earlier of now and to.
+    Every request needs a bearer token issued for the local MCP resource.
 servers:
   - url: http://127.0.0.1:8787
+security:
+  - bearerAuth: []
 paths:
   /v1/activity:
     get:
@@ -26,6 +29,8 @@ paths:
                   $ref: "#/components/schemas/Segment"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /v1/summary:
     get:
       operationId: summarizeTime
@@ -59,6 +64,8 @@ paths:
                   $ref: "#/components/schemas/Summary"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /v1/current:
     get:
       operationId: currentActivity
@@ -70,6 +77,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Segment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           description: Nothing is being recorded
           content:
@@ -94,9 +103,25 @@ components:
       schema:
         type: string
         format: date-time
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from the local authorization server on the MCP listener. Audience is that listener's /mcp resource.
   responses:
     BadRequest:
       description: Invalid query
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid bearer token
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
       content:
         application/json:
           schema:

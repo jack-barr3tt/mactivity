@@ -12,11 +12,13 @@ The agent is the only writer. The Go process opens the database `query_only`. Th
 
 `db/schema.sql` is the schema. The agent applies it on open. There is no migrate runner.
 
-Local development is **Makefile + tmux**. `make dev` builds the agent bundle and starts the agent plus the API (air). `make stop-tmux` kills the session.
+Local development is **Makefile + tmux**. `make dev` builds the agent bundle and starts the agent plus the API (air). `make stop` kills the session.
 
 Codegen and lint are per-component targets plus an aggregate: `make generate-backend`; `make lint-api` / `make lint-agent` / `make lint`. golangci-lint is pinned with `api/golangci-lint.mod` / `api/golangci-lint.sum`. SwiftLint is pinned in the Makefile and configured by `agent/.swiftlint.yml`. Swift has no modfile equivalent.
 
-REST listens on `127.0.0.1:8787`. MCP streamable HTTP listens on `127.0.0.1:8788`. `mactivityd --stdio` is the Cursor transport. `make mcp` prints a config that points at the built binary.
+REST listens on `127.0.0.1:8787`. MCP streamable HTTP listens on `127.0.0.1:8788/mcp`. `mactivityd --stdio` is the Cursor transport. `make mcp` prints a config that points at the built binary.
+
+REST and MCP HTTP require an OAuth 2.1 bearer token (MCP authorization, 2025-11-25). The MCP listener is the authorization server: protected-resource metadata, authorization-server metadata, dynamic client registration, a local consent page, and authorization-code with S256 PKCE. Refresh tokens rotate. Access tokens are ES256 JWTs for one hour; the audience is `http://<mcp-host>/mcp` and the only scope is `activity:read`. REST accepts those same tokens. The signing key and client store are `oauth.key` and `oauth.db` next to the activity database. Both listeners stay on loopback and speak HTTP there. `--stdio` does not use this flow.
 
 ## Recording
 

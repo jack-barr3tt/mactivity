@@ -64,6 +64,9 @@ type To = time.Time
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
 
+// Unauthorized defines model for Unauthorized.
+type Unauthorized = Error
+
 // ListActivityParams defines parameters for ListActivity.
 type ListActivityParams struct {
 	// From Window start, inclusive.
