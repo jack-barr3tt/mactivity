@@ -37,7 +37,13 @@ final class Recorder {
             self.workspaceObserver = nil
         }
         clearObserver()
-        store.stop()
+        if let end = sampleState.pendingEnd {
+            let ms = Int64((end.timeIntervalSince1970 * 1000).rounded())
+            try? store.endOpen(at: ms)
+            IdleNotifier.withdraw()
+        } else {
+            store.stop()
+        }
         sampleState = SampleState()
     }
 
@@ -47,6 +53,7 @@ final class Recorder {
         let timeout = IdleTimeout.timeout
         let idle = Probe.idleSeconds() ?? 0
         let video = idle >= timeout && Probe.focusedVideoPlaying(bundleID: observation.snapshot.bundleID)
+        let wasPending = sampleState.pendingEnd != nil
         let (next, action) = SamplePolicy.step(
             state: sampleState,
             input: SampleInput(
@@ -55,11 +62,15 @@ final class Recorder {
                 idle: idle,
                 video: video,
                 timeout: timeout,
-                grace: IdleTimeout.grace
+                grace: IdleTimeout.grace,
+                undoWindow: IdleNotifier.canUndo ? IdleNotifier.undoWindow : nil
             )
         )
         do {
             try apply(action, snapshot: observation.snapshot)
+            if wasPending && next.pendingEnd == nil {
+                IdleNotifier.withdraw()
+            }
             sampleState = next
         } catch {
             FileHandle.standardError.write(Data("mactivity: \(error)\n".utf8))
@@ -77,6 +88,8 @@ final class Recorder {
         case .end(let date):
             let ms = Int64((date.timeIntervalSince1970 * 1000).rounded())
             try store.endOpen(at: ms)
+        case .notifyIdle:
+            IdleNotifier.post()
         }
     }
 

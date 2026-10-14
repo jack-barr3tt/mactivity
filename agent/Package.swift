@@ -13,6 +13,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
                 .linkedFramework("IOKit"),
+                .linkedFramework("UserNotifications"),
             ]
         ),
         .testTarget(
@@ -21,6 +22,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
                 .linkedFramework("IOKit"),
+                .linkedFramework("UserNotifications"),
             ]
         ),
     ]

@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signalSources: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        IdleNotifier.install()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let image = NSImage(systemSymbolName: "clock", accessibilityDescription: "mactivity") {
             image.isTemplate = true
@@ -89,6 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(selectGrace(_:)),
             maxSeconds: IdleTimeout.timeout
         ))
+        let notify = NSMenuItem(title: "Notify when idle", action: #selector(toggleNotify(_:)), keyEquivalent: "")
+        notify.target = self
+        notify.state = IdleTimeout.notify ? .on : .off
+        menu.addItem(notify)
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -139,6 +144,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func selectGrace(_ sender: NSMenuItem) {
         IdleTimeout.selectGrace(TimeInterval(sender.tag))
         rebuildMenu()
+    }
+
+    @objc private func toggleNotify(_ sender: NSMenuItem) {
+        if IdleTimeout.notify {
+            IdleTimeout.setNotify(false)
+            rebuildMenu()
+            return
+        }
+        IdleNotifier.requestAccess { [weak self] granted in
+            IdleTimeout.setNotify(granted)
+            self?.rebuildMenu()
+        }
     }
 
     @objc private func requestPermission() {

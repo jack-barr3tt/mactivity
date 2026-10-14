@@ -26,13 +26,15 @@ Each focus change closes the open segment and inserts the next one. Identical sn
 
 The status menu has two idle settings, each 1, 2, 5, or 10 minutes, stored in the `mactivity` user defaults and read on each sample. **Idle after** is how long without input before the segment is cut; the default is 5. **Count after activity** is how much of that wait is still recorded; the default is 2, and it cannot be longer than Idle after. When idle reaches Idle after, the open segment closes at last input plus Count after activity and stays closed until the next input. A window-title change during that gap does not open a segment. A playing video in the focused window does not count as idle: the front Chrome or Safari tab has an HTML5 video that is not paused, or the frontmost app is QuickTime, TV, IINA, or VLC and reports that it is playing. Spotify and other audio, and video that is not in the focused window, still time out. If that video was holding the segment open and then stops, the segment ends then.
 
+**Notify when idle** is off unless turned on in the status menu. When it is on and notification permission is granted, reaching Idle after posts a notification and leaves the segment open for 10 seconds. Input or a focused playing video in that window cancels the cutoff, so the block continues; the same snapshot keeps the open row, and a new snapshot is recorded as a normal focus change. A window-title change during the wait does not cancel it. If nothing happens, the segment still closes at the original cutoff. Quit during those 10 seconds commits that cutoff.
+
 Windows are half-open: `[from, to)`. Duration is the overlap only:
 
 `min(ended_at or now, to) - max(started_at, from)`
 
 Chrome (`com.google.Chrome`) also stores the active tab URL and hostname. Other apps leave those null. `contains` is a case-insensitive substring of app name, window title, URL, and hostname, so `jira` can match a tab on `company.atlassian.net`.
 
-On quit, close the open segment. On launch, close any segment left open by a crash, ending it at startup.
+On quit, close the open segment (at the pending cutoff when the idle notification is still waiting). On launch, close any segment left open by a crash, ending it at startup.
 
 ## Tests
 
