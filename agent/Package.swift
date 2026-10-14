@@ -12,6 +12,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
+                .linkedFramework("IOKit"),
             ]
         ),
         .testTarget(
@@ -19,6 +20,7 @@ let package = Package(
             dependencies: ["Mactivity"],
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
+                .linkedFramework("IOKit"),
             ]
         ),
     ]

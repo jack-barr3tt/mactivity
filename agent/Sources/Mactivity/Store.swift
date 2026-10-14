@@ -52,6 +52,20 @@ final class Store {
         last = nil
     }
 
+    func endOpen(at ms: Int64) throws {
+        try exec("BEGIN IMMEDIATE")
+        var committed = false
+        defer {
+            if !committed {
+                sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            }
+        }
+        try closeOpen(at: ms, clampToStart: true)
+        try exec("COMMIT")
+        committed = true
+        last = nil
+    }
+
     @discardableResult
     func record(_ snapshot: Snapshot) throws -> Bool {
         if last == snapshot {
@@ -73,8 +87,10 @@ final class Store {
         return true
     }
 
-    private func closeOpen(at ms: Int64) throws {
-        let sql = "UPDATE segments SET ended_at = ? WHERE ended_at IS NULL"
+    private func closeOpen(at ms: Int64, clampToStart: Bool = false) throws {
+        let sql = clampToStart
+            ? "UPDATE segments SET ended_at = MAX(?, started_at) WHERE ended_at IS NULL"
+            : "UPDATE segments SET ended_at = ? WHERE ended_at IS NULL"
         let stmt = try prepare(sql)
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int64(stmt, 1, ms)

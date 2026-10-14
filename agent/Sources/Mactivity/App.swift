@@ -82,6 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(grant)
         }
         menu.addItem(.separator())
+        menu.addItem(minutesItem(title: "Idle after", selected: IdleTimeout.timeout, action: #selector(selectTimeout(_:))))
+        menu.addItem(minutesItem(
+            title: "Count after activity",
+            selected: IdleTimeout.grace,
+            action: #selector(selectGrace(_:)),
+            maxSeconds: IdleTimeout.timeout
+        ))
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -98,6 +105,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             source.resume()
             signalSources.append(source)
         }
+    }
+
+    private func minutesItem(
+        title: String,
+        selected: TimeInterval,
+        action: Selector,
+        maxSeconds: TimeInterval? = nil
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        for seconds in IdleTimeout.choices {
+            let minutes = Int(seconds / 60)
+            let label = minutes == 1 ? "1 minute" : "\(minutes) minutes"
+            let choice = NSMenuItem(title: label, action: action, keyEquivalent: "")
+            choice.target = self
+            choice.tag = Int(seconds)
+            choice.state = selected == seconds ? .on : .off
+            if let maxSeconds, seconds > maxSeconds {
+                choice.isEnabled = false
+            }
+            submenu.addItem(choice)
+        }
+        item.submenu = submenu
+        return item
+    }
+
+    @objc private func selectTimeout(_ sender: NSMenuItem) {
+        IdleTimeout.selectTimeout(TimeInterval(sender.tag))
+        rebuildMenu()
+    }
+
+    @objc private func selectGrace(_ sender: NSMenuItem) {
+        IdleTimeout.selectGrace(TimeInterval(sender.tag))
+        rebuildMenu()
     }
 
     @objc private func requestPermission() {

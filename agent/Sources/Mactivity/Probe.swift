@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import IOKit
 
 enum Probe {
     static let chromeBundleID = "com.google.Chrome"
@@ -33,6 +34,56 @@ enum Probe {
         )
     }
 
+    static func idleSeconds() -> TimeInterval? {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOHIDSystem"))
+        guard service != IO_OBJECT_NULL else { return nil }
+        defer { IOObjectRelease(service) }
+        guard let property = IORegistryEntryCreateCFProperty(service, "HIDIdleTime" as CFString, kCFAllocatorDefault, 0) else {
+            return nil
+        }
+        let value = property.takeRetainedValue()
+        guard let number = value as? NSNumber else { return nil }
+        let nanos = number.int64Value
+        guard nanos >= 0 else { return nil }
+        return TimeInterval(nanos) / 1_000_000_000
+    }
+
+    static func focusedVideoPlaying(bundleID: String) -> Bool {
+        switch bundleID {
+        case chromeBundleID:
+            return browserVideoPlaying(
+                application: "Google Chrome",
+                tab: "return execute javascript \"\(videoScript)\" in active tab of front window"
+            )
+        case "com.apple.Safari":
+            return browserVideoPlaying(
+                application: "Safari",
+                tab: "return do JavaScript \"\(videoScript)\" in current tab of front window"
+            )
+        case "com.apple.QuickTimePlayerX":
+            return scriptIsTrue("""
+            tell application "QuickTime Player"
+                if (count of documents) is 0 then return false
+                return playing of front document
+            end tell
+            """)
+        case "com.apple.TV":
+            return scriptIsTrue("""
+            tell application "TV" to return player state is playing
+            """)
+        case "com.colliderli.iina":
+            return scriptIsTrue("""
+            tell application "IINA" to return playing
+            """)
+        case "org.videolan.vlc":
+            return scriptIsTrue("""
+            tell application "VLC" to return playing
+            """)
+        default:
+            return false
+        }
+    }
+
     static func accessibilityTrusted(prompt: Bool) -> Bool {
         if !prompt {
             return AXIsProcessTrusted()
@@ -59,6 +110,34 @@ enum Probe {
             return url
         }
         return nil
+    }
+
+    private static let videoScript =
+        "(function(){var list=document.querySelectorAll('video');" +
+        "for(var i=0;i<list.length;i++){var v=list[i];if(!v.paused&&!v.ended)return true;}return false;})()"
+
+    private static func browserVideoPlaying(application: String, tab: String) -> Bool {
+        let source = """
+        tell application "\(application)"
+            if (count of windows) is 0 then return false
+            \(tab)
+        end tell
+        """
+        return scriptIsTrue(source)
+    }
+
+    private static func scriptIsTrue(_ source: String) -> Bool {
+        guard let descriptor = runScript(source) else { return false }
+        if descriptor.booleanValue { return true }
+        return descriptor.stringValue == "true"
+    }
+
+    private static func runScript(_ source: String) -> NSAppleEventDescriptor? {
+        var error: NSDictionary?
+        guard let script = NSAppleScript(source: source) else { return nil }
+        let descriptor = script.executeAndReturnError(&error)
+        if error != nil { return nil }
+        return descriptor
     }
 
     private static func chromeURLViaAppleScript() -> String? {

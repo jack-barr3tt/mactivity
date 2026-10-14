@@ -4,6 +4,7 @@ import ApplicationServices
 final class Recorder {
     private let store: Store
     private var timer: Timer?
+    private var sampleState = SampleState()
     private var workspaceObserver: NSObjectProtocol?
     private var observer: AXObserver?
     private var watchedPID: pid_t = -1
@@ -37,17 +38,45 @@ final class Recorder {
         }
         clearObserver()
         store.stop()
+        sampleState = SampleState()
     }
 
     func sample() {
         guard let observation = Probe.observe() else { return }
         watch(pid: observation.pid)
+        let timeout = IdleTimeout.timeout
+        let idle = Probe.idleSeconds() ?? 0
+        let video = idle >= timeout && Probe.focusedVideoPlaying(bundleID: observation.snapshot.bundleID)
+        let (next, action) = SamplePolicy.step(
+            state: sampleState,
+            input: SampleInput(
+                snapshot: observation.snapshot,
+                now: Date(),
+                idle: idle,
+                video: video,
+                timeout: timeout,
+                grace: IdleTimeout.grace
+            )
+        )
         do {
-            if try store.record(observation.snapshot) {
-                log(observation.snapshot)
-            }
+            try apply(action, snapshot: observation.snapshot)
+            sampleState = next
         } catch {
             FileHandle.standardError.write(Data("mactivity: \(error)\n".utf8))
+        }
+    }
+
+    private func apply(_ action: SampleAction, snapshot: Snapshot) throws {
+        switch action {
+        case .none:
+            return
+        case .record:
+            if try store.record(snapshot) {
+                log(snapshot)
+            }
+        case .end(let date):
+            let ms = Int64((date.timeIntervalSince1970 * 1000).rounded())
+            try store.endOpen(at: ms)
         }
     }
 
