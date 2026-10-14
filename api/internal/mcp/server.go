@@ -31,7 +31,7 @@ func New(db *store.Store) *Server {
 	}, s.listActivity)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "summarize_time",
-		Description: "Time spent in a half-open window, grouped by hostname or app. contains is a case-insensitive substring of the app name, window title, URL, or hostname, so jira matches a Jira tab on company.atlassian.net.",
+		Description: "Time spent in a half-open window, grouped by hostname, app, category, or work. category is the on-device label. work splits time into work and not_work. Unlabeled segments are left out of those groups. contains is a case-insensitive substring of the app name, window title, URL, or hostname, so jira matches a Jira tab on company.atlassian.net.",
 	}, s.summarizeTime)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "current_activity",
@@ -59,7 +59,7 @@ type windowInput struct {
 type summaryInput struct {
 	From     string `json:"from" jsonschema:"inclusive window start, RFC3339"`
 	To       string `json:"to" jsonschema:"exclusive window end, RFC3339"`
-	Group    string `json:"group" jsonschema:"hostname or app"`
+	Group    string `json:"group" jsonschema:"hostname, app, category, or work"`
 	Contains string `json:"contains,omitempty" jsonschema:"optional case-insensitive substring matched against app name, window title, URL, and hostname"`
 }
 
@@ -72,6 +72,8 @@ type segmentOut struct {
 	WindowTitle *string    `json:"windowTitle"`
 	URL         *string    `json:"url"`
 	Hostname    *string    `json:"hostname"`
+	Category    *string    `json:"category"`
+	WorkRelated *bool      `json:"workRelated"`
 }
 
 type activityOut struct {
@@ -108,8 +110,10 @@ func (s *Server) summarizeTime(ctx context.Context, _ *sdkmcp.CallToolRequest, i
 	if err != nil {
 		return nil, summaryOut{}, err
 	}
-	if in.Group != "hostname" && in.Group != "app" {
-		return nil, summaryOut{}, errors.New("group must be hostname or app")
+	switch in.Group {
+	case "hostname", "app", "category", "work":
+	default:
+		return nil, summaryOut{}, errors.New("group must be hostname, app, category, or work")
 	}
 	rows, err := s.db.Summary(ctx, from, to, s.now(), in.Group, in.Contains)
 	if err != nil {
@@ -158,5 +162,7 @@ func toSegment(seg store.Segment) segmentOut {
 		WindowTitle: seg.WindowTitle,
 		URL:         seg.URL,
 		Hostname:    seg.Hostname,
+		Category:    seg.Category,
+		WorkRelated: seg.WorkRelated,
 	}
 }

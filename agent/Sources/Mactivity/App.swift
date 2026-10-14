@@ -60,9 +60,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             let store = try Store()
             let recorder = Recorder(store: store)
+            recorder.onStatus = { [weak self] detail in
+                guard let self, self.statusDetail != detail else { return }
+                self.statusDetail = detail
+                self.rebuildMenu()
+            }
+            statusDetail = "Recording"
             recorder.start()
             self.recorder = recorder
-            statusDetail = "Recording"
         } catch {
             statusDetail = error.localizedDescription
         }
@@ -94,6 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notify.target = self
         notify.state = IdleTimeout.notify ? .on : .off
         menu.addItem(notify)
+        let classify = NSMenuItem(title: "Classify windows", action: #selector(toggleClassify(_:)), keyEquivalent: "")
+        classify.target = self
+        classify.state = IdleTimeout.classify ? .on : .off
+        menu.addItem(classify)
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -143,6 +152,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func selectGrace(_ sender: NSMenuItem) {
         IdleTimeout.selectGrace(TimeInterval(sender.tag))
+        rebuildMenu()
+    }
+
+    @objc private func toggleClassify(_ sender: NSMenuItem) {
+        let enabled = !IdleTimeout.classify
+        IdleTimeout.setClassify(enabled)
+        recorder?.setClassification(enabled: enabled)
         rebuildMenu()
     }
 

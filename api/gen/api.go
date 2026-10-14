@@ -15,7 +15,9 @@ import (
 // Defines values for SummarizeTimeParamsGroup.
 const (
 	App      SummarizeTimeParamsGroup = "app"
+	Category SummarizeTimeParamsGroup = "category"
 	Hostname SummarizeTimeParamsGroup = "hostname"
+	Work     SummarizeTimeParamsGroup = "work"
 )
 
 // Valid indicates whether the value is a known member of the SummarizeTimeParamsGroup enum.
@@ -23,7 +25,11 @@ func (e SummarizeTimeParamsGroup) Valid() bool {
 	switch e {
 	case App:
 		return true
+	case Category:
+		return true
 	case Hostname:
+		return true
+	case Work:
 		return true
 	default:
 		return false
@@ -37,14 +43,20 @@ type Error struct {
 
 // Segment defines model for Segment.
 type Segment struct {
-	AppName     string     `json:"appName"`
-	BundleId    string     `json:"bundleId"`
+	AppName  string `json:"appName"`
+	BundleId string `json:"bundleId"`
+
+	// Category On-device label. One of code, communication, docs, browse, media, or other.
+	Category    *string    `json:"category,omitempty"`
 	EndedAt     *time.Time `json:"endedAt,omitempty"`
 	Hostname    *string    `json:"hostname,omitempty"`
 	Id          int64      `json:"id"`
 	StartedAt   time.Time  `json:"startedAt"`
 	Url         *string    `json:"url,omitempty"`
 	WindowTitle *string    `json:"windowTitle,omitempty"`
+
+	// WorkRelated True when the on-device model judged the window to be work.
+	WorkRelated *bool `json:"workRelated,omitempty"`
 }
 
 // Summary defines model for Summary.
@@ -84,7 +96,8 @@ type SummarizeTimeParams struct {
 	// To Window end, exclusive.
 	To To `form:"to" json:"to"`
 
-	// Group Group totals by Chrome hostname or by application name.
+	// Group Group totals by Chrome hostname, application name, on-device category,
+	// or work (`work` and `not_work`). Unlabeled segments are left out of category and work totals.
 	Group SummarizeTimeParamsGroup `form:"group" json:"group"`
 
 	// Contains Case-insensitive substring matched against app name, window title, URL, and hostname.

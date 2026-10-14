@@ -8,6 +8,7 @@ enum IdleTimeout {
     private static let timeoutKey = "idleTimeoutSeconds"
     private static let graceKey = "idleGraceSeconds"
     private static let notifyKey = "idleNotify"
+    private static let classifyKey = "classifyWindows"
     private static let defaults = UserDefaults(suiteName: "mactivity") ?? .standard
 
     static var timeout: TimeInterval {
@@ -20,6 +21,10 @@ enum IdleTimeout {
 
     static var notify: Bool {
         defaults.bool(forKey: notifyKey)
+    }
+
+    static var classify: Bool {
+        defaults.bool(forKey: classifyKey)
     }
 
     static func selectTimeout(_ seconds: TimeInterval) {
@@ -37,6 +42,10 @@ enum IdleTimeout {
 
     static func setNotify(_ enabled: Bool) {
         defaults.set(enabled, forKey: notifyKey)
+    }
+
+    static func setClassify(_ enabled: Bool) {
+        defaults.set(enabled, forKey: classifyKey)
     }
 
     private static func stored(_ key: String, fallback: TimeInterval) -> TimeInterval {

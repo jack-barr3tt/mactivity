@@ -10,7 +10,7 @@ A Swift menu bar agent records focus intervals. A Go process reads that SQLite f
 
 The agent is the only writer. The Go process opens the database `query_only`. The file lives at `~/Library/Application Support/mactivity/activity.db` unless `MACTIVITY_DB` is set. Both sides must keep that path.
 
-`db/schema.sql` is the schema. The agent applies it on open. There is no migrate runner.
+`db/schema.sql` is the schema. The agent applies it on open. There is no migrate runner. If an existing database is missing `category` or `work_related`, the agent adds that column on open.
 
 Local development is **Makefile + tmux**. `make dev` builds the agent bundle and starts the agent plus the API (air). `make stop` kills the session.
 
@@ -35,6 +35,8 @@ Windows are half-open: `[from, to)`. Duration is the overlap only:
 Chrome (`com.google.Chrome`) also stores the active tab URL and hostname. Other apps leave those null. `contains` is a case-insensitive substring of app name, window title, URL, and hostname, so `jira` can match a tab on `company.atlassian.net`.
 
 On quit, close the open segment (at the pending cutoff when the idle notification is still waiting). On launch, close any segment left open by a crash, ending it at startup.
+
+**Classify windows** is off unless turned on in the status menu. When it is on and a segment opens, the on-device Apple Intelligence model classifies it if that model is available. The label is a category (`code`, `communication`, `docs`, `browse`, `media`, or `other`) and whether the window looks work-related. Recording does not wait on the model, so those columns stay null until the result is written onto that row. A later segment with the same app, bundle id, window title, URL, and hostname copies the newest label. The status item shows the open segment’s label once it exists. `summarize_time` can group by `category` or `work` (`work` and `not_work`). Unlabeled time is left out of those groups.
 
 ## Tests
 

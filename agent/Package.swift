@@ -1,9 +1,9 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "Mactivity",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v26)],
     targets: [
         .executableTarget(
             name: "Mactivity",
@@ -12,6 +12,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
+                .linkedFramework("FoundationModels"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("UserNotifications"),
             ]
@@ -21,6 +22,7 @@ let package = Package(
             dependencies: ["Mactivity"],
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
+                .linkedFramework("FoundationModels"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("UserNotifications"),
             ]

@@ -29,6 +29,8 @@ type Segment struct {
 	WindowTitle *string
 	URL         *string
 	Hostname    *string
+	Category    *string
+	WorkRelated *bool
 }
 
 type SummaryRow struct {
@@ -77,7 +79,7 @@ func (s *Store) Timeline(ctx context.Context, from, to, now time.Time) ([]Segmen
 		return nil, err
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, started_at, ended_at, app_name, bundle_id, window_title, url, hostname
+		SELECT id, started_at, ended_at, app_name, bundle_id, window_title, url, hostname, category, work_related
 		FROM segments
 		WHERE started_at < ? AND COALESCE(ended_at, ?) > ?
 		ORDER BY started_at ASC, id ASC
@@ -179,7 +181,7 @@ func (s *Store) Current(ctx context.Context) (*Segment, error) {
 		return nil, err
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT id, started_at, ended_at, app_name, bundle_id, window_title, url, hostname
+		SELECT id, started_at, ended_at, app_name, bundle_id, window_title, url, hostname, category, work_related
 		FROM segments
 		WHERE ended_at IS NULL
 		ORDER BY started_at DESC, id DESC
@@ -230,8 +232,12 @@ func groupColumn(group string) (string, error) {
 		return "hostname", nil
 	case "app":
 		return "app_name", nil
+	case "category":
+		return "category", nil
+	case "work":
+		return "CASE work_related WHEN 1 THEN 'work' WHEN 0 THEN 'not_work' END", nil
 	default:
-		return "", fmt.Errorf("group must be hostname or app")
+		return "", fmt.Errorf("group must be hostname, app, category, or work")
 	}
 }
 
@@ -241,14 +247,19 @@ type scanner interface {
 
 func scanSegment(row scanner) (Segment, error) {
 	var (
-		seg     Segment
-		started int64
-		ended   sql.NullInt64
-		title   sql.NullString
-		pageURL sql.NullString
-		host    sql.NullString
+		seg      Segment
+		started  int64
+		ended    sql.NullInt64
+		title    sql.NullString
+		pageURL  sql.NullString
+		host     sql.NullString
+		category sql.NullString
+		work     sql.NullInt64
 	)
-	err := row.Scan(&seg.ID, &started, &ended, &seg.AppName, &seg.BundleID, &title, &pageURL, &host)
+	err := row.Scan(
+		&seg.ID, &started, &ended, &seg.AppName, &seg.BundleID,
+		&title, &pageURL, &host, &category, &work,
+	)
 	if err != nil {
 		return Segment{}, err
 	}
@@ -260,6 +271,11 @@ func scanSegment(row scanner) (Segment, error) {
 	seg.WindowTitle = stringPtr(title)
 	seg.URL = stringPtr(pageURL)
 	seg.Hostname = stringPtr(host)
+	seg.Category = stringPtr(category)
+	if work.Valid {
+		value := work.Int64 != 0
+		seg.WorkRelated = &value
+	}
 	return seg, nil
 }
 

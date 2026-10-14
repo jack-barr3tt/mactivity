@@ -9,6 +9,11 @@ struct Snapshot: Equatable {
     var hostname: String?
 }
 
+struct WrittenSegment {
+    var id: Int64
+    var label: WindowLabel?
+}
+
 final class Store {
     private var db: OpaquePointer?
     private var last: Snapshot?
@@ -38,6 +43,7 @@ final class Store {
         try exec("PRAGMA journal_mode=WAL")
         sqlite3_busy_timeout(openedHandle, 5000)
         try exec(try String(contentsOfFile: schemaPath, encoding: .utf8))
+        try ensureLabelColumns()
         try closeOpen(at: Self.now())
     }
 
@@ -67,9 +73,9 @@ final class Store {
     }
 
     @discardableResult
-    func record(_ snapshot: Snapshot) throws -> Bool {
+    func record(_ snapshot: Snapshot, reuseLabel: Bool = true) throws -> WrittenSegment? {
         if last == snapshot {
-            return false
+            return nil
         }
         let ms = Self.now()
         try exec("BEGIN IMMEDIATE")
@@ -80,11 +86,35 @@ final class Store {
             }
         }
         try closeOpen(at: ms)
-        try insert(snapshot, startedAt: ms)
+        let label = reuseLabel ? try cachedLabel(snapshot) : nil
+        let id = try insert(snapshot, startedAt: ms, label: label)
         try exec("COMMIT")
         committed = true
         last = snapshot
-        return true
+        return WrittenSegment(id: id, label: label)
+    }
+
+    func needsLabel(id: Int64) throws -> Bool {
+        let stmt = try prepare("SELECT category IS NULL OR work_related IS NULL FROM segments WHERE id = ?")
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, id)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return false }
+        return sqlite3_column_int(stmt, 0) != 0
+    }
+
+    func applyCachedLabel(id: Int64, snapshot: Snapshot) throws -> WindowLabel? {
+        guard try needsLabel(id: id), let label = try cachedLabel(snapshot) else { return nil }
+        try setLabel(id: id, label)
+        return label
+    }
+
+    func setLabel(id: Int64, _ label: WindowLabel) throws {
+        let stmt = try prepare("UPDATE segments SET category = ?, work_related = ? WHERE id = ?")
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, label.category)
+        sqlite3_bind_int64(stmt, 2, label.workRelated ? 1 : 0)
+        sqlite3_bind_int64(stmt, 3, id)
+        try stepDone(stmt)
     }
 
     private func closeOpen(at ms: Int64, clampToStart: Bool = false) throws {
@@ -97,10 +127,12 @@ final class Store {
         try stepDone(stmt)
     }
 
-    private func insert(_ snapshot: Snapshot, startedAt ms: Int64) throws {
+    private func insert(_ snapshot: Snapshot, startedAt ms: Int64, label: WindowLabel?) throws -> Int64 {
         let sql = """
-        INSERT INTO segments (started_at, ended_at, app_name, bundle_id, window_title, url, hostname)
-        VALUES (?, NULL, ?, ?, ?, ?, ?)
+        INSERT INTO segments (
+            started_at, ended_at, app_name, bundle_id, window_title, url, hostname, category, work_related
+        )
+        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)
         """
         let stmt = try prepare(sql)
         defer { sqlite3_finalize(stmt) }
@@ -110,7 +142,56 @@ final class Store {
         bindText(stmt, 4, snapshot.windowTitle)
         bindText(stmt, 5, snapshot.url)
         bindText(stmt, 6, snapshot.hostname)
+        bindText(stmt, 7, label?.category)
+        if let label {
+            sqlite3_bind_int64(stmt, 8, label.workRelated ? 1 : 0)
+        } else {
+            sqlite3_bind_null(stmt, 8)
+        }
         try stepDone(stmt)
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    private func cachedLabel(_ snapshot: Snapshot) throws -> WindowLabel? {
+        let sql = """
+        SELECT category, work_related FROM segments
+        WHERE app_name = ? AND bundle_id = ?
+          AND window_title IS ? AND url IS ? AND hostname IS ?
+          AND category IS NOT NULL AND work_related IS NOT NULL
+        ORDER BY id DESC
+        LIMIT 1
+        """
+        let stmt = try prepare(sql)
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, snapshot.appName)
+        bindText(stmt, 2, snapshot.bundleID)
+        bindText(stmt, 3, snapshot.windowTitle)
+        bindText(stmt, 4, snapshot.url)
+        bindText(stmt, 5, snapshot.hostname)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        guard let raw = sqlite3_column_text(stmt, 0) else { return nil }
+        return WindowLabel(category: String(cString: raw), workRelated: sqlite3_column_int64(stmt, 1) != 0)
+    }
+
+    private func ensureLabelColumns() throws {
+        let present = try columnNames()
+        if !present.contains("category") {
+            try exec("ALTER TABLE segments ADD COLUMN category TEXT")
+        }
+        if !present.contains("work_related") {
+            try exec("ALTER TABLE segments ADD COLUMN work_related INTEGER")
+        }
+    }
+
+    private func columnNames() throws -> Set<String> {
+        let stmt = try prepare("PRAGMA table_info(segments)")
+        defer { sqlite3_finalize(stmt) }
+        var names = Set<String>()
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let raw = sqlite3_column_text(stmt, 1) else { continue }
+            names.insert(String(cString: raw))
+        }
+        return names
     }
 
     private func prepare(_ sql: String) throws -> OpaquePointer {

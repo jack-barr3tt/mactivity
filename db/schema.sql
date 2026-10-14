@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS segments (
     bundle_id TEXT NOT NULL,
     window_title TEXT,
     url TEXT,
-    hostname TEXT
+    hostname TEXT,
+    category TEXT,
+    work_related INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_segments_started_at ON segments (started_at);

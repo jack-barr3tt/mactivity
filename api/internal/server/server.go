@@ -88,7 +88,7 @@ func (s *Server) SummarizeTime(c fiber.Ctx, params api.SummarizeTimeParams) erro
 		return badRequest(c, "from must be before to")
 	}
 	if !params.Group.Valid() {
-		return badRequest(c, "group must be hostname or app")
+		return badRequest(c, "group must be hostname, app, category, or work")
 	}
 	contains := ""
 	if params.Contains != nil {
@@ -130,5 +130,7 @@ func toAPI(seg store.Segment) api.Segment {
 		WindowTitle: seg.WindowTitle,
 		Url:         seg.URL,
 		Hostname:    seg.Hostname,
+		Category:    seg.Category,
+		WorkRelated: seg.WorkRelated,
 	}
 }

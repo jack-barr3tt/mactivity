@@ -93,6 +93,54 @@ func TestCurrent(t *testing.T) {
 	assert.Nil(t, got.EndedAt)
 }
 
+func TestTimelineReadsLabel(t *testing.T) {
+	path, db := newDB(t)
+	_, err := db.Exec(`
+		INSERT INTO segments (started_at, ended_at, app_name, bundle_id, window_title, url, hostname, category, work_related)
+		VALUES (?, ?, 'Code', 'com.todesktop.230313mzl4w4u92', 'mactivity', NULL, NULL, 'code', 1)
+	`, at(10, 0).UnixMilli(), at(12, 0).UnixMilli())
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	st := store.Open(path)
+	t.Cleanup(func() { _ = st.Close() })
+
+	got, err := st.Timeline(context.Background(), at(11, 0), at(15, 0), at(16, 0))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.NotNil(t, got[0].Category)
+	assert.Equal(t, "code", *got[0].Category)
+	require.NotNil(t, got[0].WorkRelated)
+	assert.True(t, *got[0].WorkRelated)
+}
+
+func TestSummaryGroupsCategoryAndWork(t *testing.T) {
+	path, db := newDB(t)
+	insertLabeled(t, db, at(10, 0), ptr(at(12, 0)), "code", 1)
+	insertLabeled(t, db, at(12, 0), ptr(at(13, 0)), "media", 0)
+	insert(t, db, at(13, 0), ptr(at(14, 0)), "Slack", "com.slack", "general", "", "")
+	require.NoError(t, db.Close())
+
+	st := store.Open(path)
+	t.Cleanup(func() { _ = st.Close() })
+
+	byCategory, err := st.Summary(context.Background(), at(11, 0), at(15, 0), at(16, 0), "category", "")
+	require.NoError(t, err)
+	require.Len(t, byCategory, 2)
+	assert.Equal(t, "code", byCategory[0].Key)
+	assert.InDelta(t, 3600, byCategory[0].Seconds, 0.001)
+	assert.Equal(t, "media", byCategory[1].Key)
+	assert.InDelta(t, 3600, byCategory[1].Seconds, 0.001)
+
+	byWork, err := st.Summary(context.Background(), at(11, 0), at(15, 0), at(16, 0), "work", "")
+	require.NoError(t, err)
+	require.Len(t, byWork, 2)
+	assert.Equal(t, "not_work", byWork[0].Key)
+	assert.InDelta(t, 3600, byWork[0].Seconds, 0.001)
+	assert.Equal(t, "work", byWork[1].Key)
+	assert.InDelta(t, 3600, byWork[1].Seconds, 0.001)
+}
+
 func TestCurrentMissing(t *testing.T) {
 	st := store.Open(filepath.Join(t.TempDir(), "missing.db"))
 	t.Cleanup(func() { _ = st.Close() })
@@ -127,6 +175,19 @@ func insert(t *testing.T, db *sql.DB, start time.Time, end *time.Time, appName, 
 		INSERT INTO segments (started_at, ended_at, app_name, bundle_id, window_title, url, hostname)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, start.UnixMilli(), ended, appName, bundleID, nullIfEmpty(title), nullIfEmpty(pageURL), nullIfEmpty(host))
+	require.NoError(t, err)
+}
+
+func insertLabeled(t *testing.T, db *sql.DB, start time.Time, end *time.Time, category string, work int) {
+	t.Helper()
+	var ended any
+	if end != nil {
+		ended = end.UnixMilli()
+	}
+	_, err := db.Exec(`
+		INSERT INTO segments (started_at, ended_at, app_name, bundle_id, window_title, url, hostname, category, work_related)
+		VALUES (?, ?, 'App', 'app.id', NULL, NULL, NULL, ?, ?)
+	`, start.UnixMilli(), ended, category, work)
 	require.NoError(t, err)
 }
 

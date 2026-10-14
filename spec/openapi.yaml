@@ -41,10 +41,12 @@ paths:
         - name: group
           in: query
           required: true
-          description: Group totals by Chrome hostname or by application name.
+          description: |
+            Group totals by Chrome hostname, application name, on-device category,
+            or work (`work` and `not_work`). Unlabeled segments are left out of category and work totals.
           schema:
             type: string
-            enum: [hostname, app]
+            enum: [hostname, app, category, work]
         - name: contains
           in: query
           required: false
@@ -154,6 +156,14 @@ components:
         hostname:
           type: string
           nullable: true
+        category:
+          type: string
+          nullable: true
+          description: On-device label. One of code, communication, docs, browse, media, or other.
+        workRelated:
+          type: boolean
+          nullable: true
+          description: True when the on-device model judged the window to be work.
     Summary:
       type: object
       required: [key, seconds]
