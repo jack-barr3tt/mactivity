@@ -1,0 +1,7 @@
+.DS_Store
+tmp/
+*.log
+api/tmp/
+agent/.build/
+agent/Mactivity.app
+.bin/

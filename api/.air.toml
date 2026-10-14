@@ -1,0 +1,11 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "./tmp/mactivityd"
+  cmd = "go build -o ./tmp/mactivityd ./cmd/mactivityd"
+  include_ext = ["go", "sql", "yaml"]
+  exclude_dir = ["tmp", "gen"]
+
+[run]
+  send_interrupt = true

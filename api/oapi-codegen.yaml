@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: api
+generate:
+  fiber-v3-server: true
+  models: true
+output: gen/api.go
+output-options:
+  skip-prune: true
