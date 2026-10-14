@@ -21,8 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionTimer: Timer?
     private var statusDetail = "Starting"
     private var signalSources: [DispatchSourceSignal] = []
+    private var daemon: Process?
+    private var daemonStartFailed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        startDaemon()
         IdleNotifier.install()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let image = NSImage(systemSymbolName: "clock", accessibilityDescription: "mactivity") {
@@ -38,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.pollPermission()
             }
         }
+        if daemonStartFailed {
+            statusDetail = "Could not start mactivityd"
+        }
         rebuildMenu()
     }
 
@@ -45,6 +51,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionTimer?.invalidate()
         recorder?.stop()
         recorder = nil
+        stopDaemon()
+    }
+
+    private func startDaemon() {
+        guard let executable = Bundle.main.executableURL else { return }
+        let url = executable.deletingLastPathComponent().appendingPathComponent("mactivityd")
+        guard FileManager.default.isExecutableFile(atPath: url.path) else { return }
+        let process = Process()
+        process.executableURL = url
+        do {
+            try process.run()
+            daemon = process
+        } catch {
+            daemonStartFailed = true
+        }
+    }
+
+    private func stopDaemon() {
+        guard let daemon, daemon.isRunning else {
+            self.daemon = nil
+            return
+        }
+        daemon.terminate()
+        daemon.waitUntilExit()
+        self.daemon = nil
     }
 
     private func pollPermission() {
@@ -52,6 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionTimer?.invalidate()
         permissionTimer = nil
         startRecording()
+        if daemonStartFailed {
+            statusDetail = "Could not start mactivityd"
+        }
         rebuildMenu()
     }
 
@@ -61,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let store = try Store()
             let recorder = Recorder(store: store)
             recorder.onStatus = { [weak self] detail in
-                guard let self, self.statusDetail != detail else { return }
+                guard let self, !self.daemonStartFailed, self.statusDetail != detail else { return }
                 self.statusDetail = detail
                 self.rebuildMenu()
             }

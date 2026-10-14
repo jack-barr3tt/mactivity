@@ -1,0 +1,29 @@
+when:
+  - event: tag
+    ref: refs/tags/v*
+
+steps:
+  - name: test-api
+    depends_on: []
+    image: golang:1.26-bookworm
+    commands:
+      - make lint-api test-api
+
+  - name: test-scripts
+    depends_on: []
+    image: node:22-alpine
+    commands:
+      - node --test scripts/*.test.mjs
+
+  - name: github-release
+    image: node:22-alpine
+    depends_on:
+      - test-api
+      - test-scripts
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
+    commands:
+      - apk add --no-cache git
+      - git fetch --tags --unshallow origin || git fetch --tags origin
+      - node scripts/github-release.mjs

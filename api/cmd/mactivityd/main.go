@@ -22,12 +22,15 @@ import (
 	"github.com/jack-barr3tt/mactivity/api/internal/store"
 )
 
+var version = "dev"
+
 func main() {
 	stdio := flag.Bool("stdio", false, "serve MCP on stdin/stdout")
 	dbFlag := flag.String("db", "", "path to activity.db (default: Application Support, or MACTIVITY_DB)")
 	httpAddr := flag.String("http", "127.0.0.1:8787", "REST listen address")
 	mcpAddr := flag.String("mcp", "127.0.0.1:8788", "MCP HTTP listen address")
 	flag.Parse()
+	slog.Info("mactivityd", "version", version)
 
 	path := *dbFlag
 	if path == "" {

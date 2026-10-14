@@ -1,0 +1,13 @@
+when:
+  - event: pull_request
+
+steps:
+  - name: test-api
+    image: golang:1.26-bookworm
+    commands:
+      - make lint-api test-api
+
+  - name: test-scripts
+    image: node:22-alpine
+    commands:
+      - node --test scripts/*.test.mjs

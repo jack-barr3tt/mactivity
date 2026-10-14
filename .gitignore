@@ -5,3 +5,4 @@ api/tmp/
 agent/.build/
 agent/Mactivity.app
 .bin/
+dist/

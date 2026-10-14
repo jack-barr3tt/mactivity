@@ -38,6 +38,10 @@ On quit, close the open segment (at the pending cutoff when the idle notificatio
 
 **Classify windows** is off unless turned on in the status menu. When it is on and a segment opens, the on-device Apple Intelligence model classifies it if that model is available. The label is a category (`code`, `communication`, `docs`, `browse`, `media`, or `other`) and whether the window looks work-related. Recording does not wait on the model, so those columns stay null until the result is written onto that row. A later segment with the same app, bundle id, window title, URL, and hostname copies the newest label. The status item shows the open segment’s label once it exists. `summarize_time` can group by `category` or `work` (`work` and `not_work`). Unlabeled time is left out of those groups.
 
+## Shipping
+
+Versions, pull-request labels, and GitHub release notes are in `RELEASING.md`. `scripts/tagbump` tags `main`. Woodpecker on Linux tests the API and publishes those notes. `make publish` on an Apple silicon Mac builds `Mactivity.app` with `mactivityd` inside it, uploads the zip, and updates the `jack-barr3tt/homebrew-mactivity` cask. The app starts that daemon when the binary sits next to it.
+
 ## Tests
 
 Go tests cover the store, HTTP wiring, and the MCP tool. Tests for package `a` live in package `a_test` and only exercise exported behaviour. `swift test` covers the agent's interval writer. `make test` runs both.

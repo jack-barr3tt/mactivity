@@ -1,0 +1,10 @@
+when:
+  - event: pull_request
+  - event: pull_request_metadata
+    evaluate: 'CI_PIPELINE_EVENT_REASON contains "label"'
+
+steps:
+  - name: change-type
+    image: node:22-alpine
+    commands:
+      - node scripts/check-label.mjs

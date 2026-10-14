@@ -1,0 +1,126 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  echo "usage: tagbump" >&2
+  exit 2
+fi
+
+cd "$(dirname "$0")/.."
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "working tree is dirty" >&2
+  exit 1
+fi
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$branch" != "main" ]; then
+  echo "tagbump runs on main" >&2
+  exit 1
+fi
+
+latest=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+
+notes_rev=$(git rev-parse HEAD)
+if git rev-parse -q --verify refs/remotes/origin/main >/dev/null; then
+  if ! git merge-base --is-ancestor "$notes_rev" origin/main; then
+    notes_rev=$(git merge-base "$notes_rev" origin/main)
+  fi
+fi
+
+if [ -z "$latest" ]; then
+  from=-
+else
+  from=$latest
+fi
+
+changes=$(node scripts/release-notes.mjs --changes "$from" "$notes_rev") || exit 1
+
+if [ -z "$latest" ] && [ -z "$changes" ]; then
+  next=v0.1.0
+  if git rev-parse -q --verify "refs/tags/${next}" >/dev/null; then
+    echo "tag ${next} already exists" >&2
+    exit 1
+  fi
+  git tag "$next"
+  echo "$next"
+  echo
+  printf '%s\n' "Initial release."
+  echo "push with: git push origin main ${next}"
+  exit 0
+fi
+
+if [ -z "$latest" ]; then
+  echo "no release tags yet; counting from v0.0.0"
+  latest=v0.0.0
+fi
+
+if [ -z "$changes" ]; then
+  echo "no merged pull requests since ${latest}" >&2
+  exit 1
+fi
+
+version=${latest#v}
+major=${version%%.*}
+rest=${version#*.}
+minor=${rest%%.*}
+patch=${rest#*.}
+
+patch_version="${major}.${minor}.$((patch + 1))"
+minor_version="${major}.$((minor + 1)).0"
+major_version="$((major + 1)).0.0"
+
+echo "Changes since ${latest}:"
+echo
+printf '%s\n' "$changes"
+
+if [ ! -r /dev/tty ]; then
+  echo "tagbump needs a terminal to choose the release type" >&2
+  exit 1
+fi
+
+while true; do
+  echo "patch  v${patch_version}"
+  echo "minor  v${minor_version}"
+  echo "major  v${major_version}"
+  printf 'Release type: ' >/dev/tty
+  IFS= read -r part </dev/tty || exit 1
+  case "$part" in
+    patch) next_version=$patch_version; break ;;
+    minor) next_version=$minor_version; break ;;
+    major) next_version=$major_version; break ;;
+    *) echo "choose patch, minor, or major" >&2 ;;
+  esac
+done
+
+next="v${next_version}"
+
+if git rev-parse -q --verify "refs/tags/${next}" >/dev/null; then
+  echo "tag ${next} already exists" >&2
+  exit 1
+fi
+
+node --input-type=module -e '
+import { readFileSync, writeFileSync } from "node:fs"
+const version = process.argv[1]
+const path = "agent/Info.plist"
+let text = readFileSync(path, "utf8")
+for (const key of ["CFBundleShortVersionString", "CFBundleVersion"]) {
+  const pattern = new RegExp("(<key>" + key + "</key>\\\\s*<string>)[^<]*(</string>)")
+  if (!pattern.test(text)) throw new Error("missing " + key)
+  text = text.replace(pattern, "$1" + version + "$2")
+}
+writeFileSync(path, text)
+' "$next_version"
+
+if ! git diff --quiet -- agent/Info.plist; then
+  git add agent/Info.plist
+  git commit -m "Release ${next}"
+fi
+
+git tag "$next"
+echo "$next"
+echo
+notes=$(node scripts/release-notes.mjs "$from" "$notes_rev" "$next_version") || exit 1
+printf '%s\n' "$notes"
+echo "push with: git push origin main ${next}"

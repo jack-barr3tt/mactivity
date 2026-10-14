@@ -2,6 +2,15 @@
 
 Menu bar agent that records the frontmost Mac app, window title, and the active Chrome tab. A local API and MCP server query that log.
 
+## Install
+
+```sh
+brew tap jack-barr3tt/homebrew-mactivity
+brew install --cask mactivity
+```
+
+The cask installs `Mactivity.app` on Apple silicon. The app starts `mactivityd` from inside the bundle. For Cursor's stdio MCP transport, point the command at `/Applications/Mactivity.app/Contents/MacOS/mactivityd` with argument `--stdio`.
+
 ## Local development
 
 Requires Go 1.26+, Swift 6, and tmux.

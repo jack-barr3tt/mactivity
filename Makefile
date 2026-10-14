@@ -1,4 +1,4 @@
-.PHONY: agent generate-backend lint-api lint-agent lint test dev stop stop-tmux mcp
+.PHONY: agent generate-backend lint-api lint-agent lint test test-api test-scripts dev stop stop-tmux mcp publish
 
 OAPI_CODEGEN_VERSION ?= v2.8.0
 AIR_VERSION ?= v1.62.0
@@ -30,9 +30,17 @@ lint-agent: $(SWIFTLINT)
 
 lint: lint-api lint-agent
 
-test:
+test-api:
 	cd $(API_DIR) && go test ./...
+
+test-scripts:
+	node --test scripts/*.test.mjs
+
+test: test-api test-scripts
 	swift test --package-path agent
+
+publish:
+	scripts/publish-app
 
 dev: agent
 	@command -v tmux >/dev/null 2>&1 || { echo "tmux is required. Install it (e.g. brew install tmux)."; exit 1; }

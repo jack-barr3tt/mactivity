@@ -1,0 +1,76 @@
+#!/bin/sh
+set -eu
+
+cd "$(dirname "$0")/.."
+
+if [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
+  echo "publish runs on an Apple silicon Mac" >&2
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "working tree is dirty" >&2
+  exit 1
+fi
+
+tag=$(git describe --exact-match --tags HEAD 2>/dev/null || true)
+if ! printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "checkout a vX.Y.Z tag" >&2
+  exit 1
+fi
+version=${tag#v}
+
+command -v gh >/dev/null 2>&1 || { echo "gh is required" >&2; exit 1; }
+if ! gh release view "$tag" >/dev/null 2>&1; then
+  echo "GitHub release ${tag} does not exist yet. Push the tag and wait for Woodpecker." >&2
+  exit 1
+fi
+
+make agent
+(
+  cd api
+  CGO_ENABLED=0 go build -ldflags "-X main.version=${version}" -o ../agent/Mactivity.app/Contents/MacOS/mactivityd ./cmd/mactivityd
+)
+codesign --force --deep --sign - agent/Mactivity.app
+
+mkdir -p dist
+zip=dist/Mactivity-darwin-arm64.zip
+rm -f "$zip"
+ditto -c -k --keepParent agent/Mactivity.app "$zip"
+sha=$(shasum -a 256 "$zip" | awk '{print $1}')
+
+gh release upload "$tag" "$zip" --clobber
+
+tap=jack-barr3tt/homebrew-mactivity
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+if ! gh repo view "$tap" >/dev/null 2>&1; then
+  gh repo create "$tap" --public --description "Homebrew cask for mactivity"
+fi
+if ! gh repo clone "$tap" "$work/tap" -- --depth 1; then
+  rm -rf "$work/tap"
+  git init -b main "$work/tap"
+  git -C "$work/tap" remote add origin "https://github.com/${tap}.git"
+fi
+mkdir -p "$work/tap/Casks"
+python3 - "$version" "$sha" packaging/homebrew/Casks/mactivity.rb "$work/tap/Casks/mactivity.rb" <<'PY'
+import pathlib, re, sys
+version, sha, src, dest = sys.argv[1:]
+text = pathlib.Path(src).read_text()
+text, n = re.subn(r'version "[^"]+"', f'version "{version}"', text, count=1)
+text, n2 = re.subn(r'sha256 "[^"]+"', f'sha256 "{sha}"', text, count=1)
+if n != 1 or n2 != 1:
+    raise SystemExit("cask template is missing version or sha256")
+pathlib.Path(dest).write_text(text)
+PY
+
+git -C "$work/tap" add Casks/mactivity.rb
+if git -C "$work/tap" diff --cached --quiet; then
+  echo "$zip"
+  echo "$sha"
+  exit 0
+fi
+git -C "$work/tap" commit -m "mactivity ${version}"
+git -C "$work/tap" push origin HEAD:main
+echo "$zip"
+echo "$sha"
