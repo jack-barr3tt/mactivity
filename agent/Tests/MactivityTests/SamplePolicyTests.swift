@@ -9,39 +9,39 @@ final class SamplePolicyTests: XCTestCase {
     private let spotify = Snapshot(appName: "Spotify", bundleID: "com.spotify.client", windowTitle: "track", url: nil, hostname: nil)
 
     func testActiveSameSnapshotDoesNothing() {
-        let state = SampleState(open: true, heldForVideo: false, last: cursor)
-        let (next, action) = step(state, cursor, idle: 10, video: false)
+        let state = SampleState(open: true, held: false, last: cursor)
+        let (next, action) = step(state, cursor, idle: 10, hold: [])
         XCTAssertEqual(action, .none)
         XCTAssertEqual(next, state)
     }
 
     func testActiveChangeRecords() {
-        let state = SampleState(open: true, heldForVideo: true, last: cursor)
-        let (next, action) = step(state, spotify, idle: 1, video: true)
+        let state = SampleState(open: true, held: true, last: cursor)
+        let (next, action) = step(state, spotify, idle: 1, hold: .focusedVideo)
         XCTAssertEqual(action, .record(spotify))
-        XCTAssertEqual(next, SampleState(open: true, heldForVideo: false, last: spotify))
+        XCTAssertEqual(next, SampleState(open: true, held: false, last: spotify))
     }
 
     func testResumeAfterIdleRecords() {
-        let (next, action) = step(SampleState(), cursor, idle: 0, video: false)
+        let (next, action) = step(SampleState(), cursor, idle: 0, hold: [])
         XCTAssertEqual(action, .record(cursor))
         XCTAssertTrue(next.open)
-        XCTAssertFalse(next.heldForVideo)
+        XCTAssertFalse(next.held)
     }
 
     func testIdleWithoutVideoEndsAtLastInputPlusTimeout() {
-        let state = SampleState(open: true, heldForVideo: false, last: spotify)
-        let (next, action) = step(state, spotify, idle: 125, video: false)
+        let state = SampleState(open: true, held: false, last: spotify)
+        let (next, action) = step(state, spotify, idle: 125, hold: [])
         XCTAssertEqual(action, .end(at: now.addingTimeInterval(-5)))
         XCTAssertEqual(next, SampleState())
     }
 
     func testIdleEndsAtGraceRatherThanTheFullTimeout() {
-        let state = SampleState(open: true, heldForVideo: false, last: spotify)
+        let state = SampleState(open: true, held: false, last: spotify)
         let (next, action) = SamplePolicy.step(
             state: state,
             input: SampleInput(
-                snapshot: spotify, now: now, idle: 310, video: false, timeout: 300, grace: 120, undoWindow: nil
+                snapshot: spotify, now: now, idle: 310, hold: [], timeout: 300, grace: 120, undoWindow: nil
             )
         )
         XCTAssertEqual(action, .end(at: now.addingTimeInterval(120 - 310)))
@@ -49,11 +49,11 @@ final class SamplePolicyTests: XCTestCase {
     }
 
     func testGraceDoesNotCutBeforeTheIdleTimeout() {
-        let state = SampleState(open: true, heldForVideo: false, last: spotify)
+        let state = SampleState(open: true, held: false, last: spotify)
         let (next, action) = SamplePolicy.step(
             state: state,
             input: SampleInput(
-                snapshot: spotify, now: now, idle: 180, video: false, timeout: 300, grace: 120, undoWindow: nil
+                snapshot: spotify, now: now, idle: 180, hold: [], timeout: 300, grace: 120, undoWindow: nil
             )
         )
         XCTAssertEqual(action, .none)
@@ -61,35 +61,35 @@ final class SamplePolicyTests: XCTestCase {
     }
 
     func testIdleTitleChangeDoesNotOpenSegment() {
-        let (next, action) = step(SampleState(), spotify, idle: 200, video: false)
+        let (next, action) = step(SampleState(), spotify, idle: 200, hold: [])
         XCTAssertEqual(action, .none)
         XCTAssertFalse(next.open)
     }
 
     func testFocusedVideoHoldsOpenSegment() {
-        let state = SampleState(open: true, heldForVideo: false, last: cursor)
-        let (next, action) = step(state, cursor, idle: 400, video: true)
+        let state = SampleState(open: true, held: false, last: cursor)
+        let (next, action) = step(state, cursor, idle: 400, hold: .focusedVideo)
         XCTAssertEqual(action, .none)
         XCTAssertTrue(next.open)
-        XCTAssertTrue(next.heldForVideo)
+        XCTAssertTrue(next.held)
     }
 
     func testVideoWhileIdleOpensSegment() {
-        let (next, action) = step(SampleState(), cursor, idle: 400, video: true)
+        let (next, action) = step(SampleState(), cursor, idle: 400, hold: .focusedVideo)
         XCTAssertEqual(action, .record(cursor))
-        XCTAssertTrue(next.heldForVideo)
+        XCTAssertTrue(next.held)
     }
 
     func testVideoStopEndsAtSampleTime() {
-        let state = SampleState(open: true, heldForVideo: true, last: cursor)
-        let (next, action) = step(state, cursor, idle: 400, video: false)
+        let state = SampleState(open: true, held: true, last: cursor)
+        let (next, action) = step(state, cursor, idle: 400, hold: [])
         XCTAssertEqual(action, .end(at: now))
         XCTAssertEqual(next, SampleState())
     }
 
     func testVideoStopWithUndoNotifiesAtSampleTime() {
-        let state = SampleState(open: true, heldForVideo: true, last: cursor)
-        let (next, action) = step(state, cursor, idle: 400, video: false, undo: 10)
+        let state = SampleState(open: true, held: true, last: cursor)
+        let (next, action) = step(state, cursor, idle: 400, hold: [], undo: 10)
         XCTAssertEqual(action, .notifyIdle(endAt: now))
         XCTAssertEqual(next.pendingEnd, now)
         XCTAssertTrue(next.open)
@@ -97,8 +97,8 @@ final class SamplePolicyTests: XCTestCase {
     }
 
     func testIdleWithUndoNotifiesWithoutEnding() {
-        let state = SampleState(open: true, heldForVideo: false, last: spotify)
-        let (next, action) = step(state, spotify, idle: 125, video: false, undo: 10)
+        let state = SampleState(open: true, held: false, last: spotify)
+        let (next, action) = step(state, spotify, idle: 125, hold: [], undo: 10)
         let end = now.addingTimeInterval(-5)
         XCTAssertEqual(action, .notifyIdle(endAt: end))
         XCTAssertEqual(next.pendingEnd, end)
@@ -109,7 +109,7 @@ final class SamplePolicyTests: XCTestCase {
 
     func testUndoWaitDoesNotNotifyAgain() {
         let pending = pendingSpotify()
-        let (next, action) = step(pending, spotify, idle: 129, video: false, at: now.addingTimeInterval(4), undo: 10)
+        let (next, action) = step(pending, spotify, idle: 129, hold: [], at: now.addingTimeInterval(4), undo: 10)
         XCTAssertEqual(action, .none)
         XCTAssertEqual(next.pendingEnd, pending.pendingEnd)
         XCTAssertEqual(next.pendingUntil, pending.pendingUntil)
@@ -117,7 +117,7 @@ final class SamplePolicyTests: XCTestCase {
     }
 
     func testActivityDuringUndoKeepsSameSegment() {
-        let (next, action) = step(pendingSpotify(), spotify, idle: 0, video: false, at: now.addingTimeInterval(3), undo: 10)
+        let (next, action) = step(pendingSpotify(), spotify, idle: 0, hold: [], at: now.addingTimeInterval(3), undo: 10)
         XCTAssertEqual(action, .none)
         XCTAssertTrue(next.open)
         XCTAssertNil(next.pendingEnd)
@@ -126,7 +126,7 @@ final class SamplePolicyTests: XCTestCase {
     }
 
     func testFocusChangeDuringUndoRecords() {
-        let (next, action) = step(pendingSpotify(), cursor, idle: 0, video: false, at: now.addingTimeInterval(3), undo: 10)
+        let (next, action) = step(pendingSpotify(), cursor, idle: 0, hold: [], at: now.addingTimeInterval(3), undo: 10)
         XCTAssertEqual(action, .record(cursor))
         XCTAssertNil(next.pendingEnd)
         XCTAssertEqual(next.last, cursor)
@@ -142,7 +142,7 @@ final class SamplePolicyTests: XCTestCase {
             hostname: nil
         )
         let pending = pendingSpotify()
-        let (next, action) = step(pending, renamed, idle: 140, video: false, at: now.addingTimeInterval(3), undo: 10)
+        let (next, action) = step(pending, renamed, idle: 140, hold: [], at: now.addingTimeInterval(3), undo: 10)
         XCTAssertEqual(action, .none)
         XCTAssertEqual(next.last, spotify)
         XCTAssertEqual(next.pendingEnd, pending.pendingEnd)
@@ -155,7 +155,7 @@ final class SamplePolicyTests: XCTestCase {
             pendingSpotify(),
             spotify,
             idle: 135,
-            video: false,
+            hold: [],
             at: now.addingTimeInterval(10),
             undo: 10
         )
@@ -164,23 +164,53 @@ final class SamplePolicyTests: XCTestCase {
     }
 
     func testVideoDuringUndoCancels() {
-        let (next, action) = step(pendingSpotify(), spotify, idle: 130, video: true, at: now.addingTimeInterval(3), undo: 10)
+        let (next, action) = step(pendingSpotify(), spotify, idle: 130, hold: .focusedVideo, at: now.addingTimeInterval(3), undo: 10)
         XCTAssertEqual(action, .none)
         XCTAssertTrue(next.open)
-        XCTAssertTrue(next.heldForVideo)
+        XCTAssertTrue(next.held)
         XCTAssertNil(next.pendingEnd)
         XCTAssertEqual(next.last, spotify)
     }
 
+    func testCameraHoldUndoCancelAndEndAtSampleTime() {
+        let (held, holdAction) = step(
+            SampleState(open: true, held: false, last: cursor),
+            cursor,
+            idle: 400,
+            hold: .camera
+        )
+        XCTAssertEqual(holdAction, .none)
+        XCTAssertTrue(held.open)
+        XCTAssertTrue(held.held)
+
+        let (cancelled, cancelAction) = step(
+            pendingSpotify(),
+            spotify,
+            idle: 130,
+            hold: .camera,
+            at: now.addingTimeInterval(3),
+            undo: 10
+        )
+        XCTAssertEqual(cancelAction, .none)
+        XCTAssertTrue(cancelled.open)
+        XCTAssertTrue(cancelled.held)
+        XCTAssertNil(cancelled.pendingEnd)
+        XCTAssertEqual(cancelled.last, spotify)
+
+        let (ended, endAction) = step(SampleState(open: true, held: true, last: cursor), cursor, idle: 400)
+        XCTAssertEqual(endAction, .end(at: now))
+        XCTAssertEqual(ended, SampleState())
+    }
+
     func testIdleWithUndoUsesGraceForTheCutoff() {
-        let state = SampleState(open: true, heldForVideo: false, last: spotify)
+        let state = SampleState(open: true, held: false, last: spotify)
         let (next, action) = SamplePolicy.step(
             state: state,
             input: SampleInput(
                 snapshot: spotify,
                 now: now,
                 idle: 310,
-                video: false,
+                hold: [],
                 timeout: 300,
                 grace: 120,
                 undoWindow: 10
@@ -195,7 +225,7 @@ final class SamplePolicyTests: XCTestCase {
     private func pendingSpotify() -> SampleState {
         SampleState(
             open: true,
-            heldForVideo: false,
+            held: false,
             last: spotify,
             pendingEnd: now.addingTimeInterval(-5),
             pendingUntil: now.addingTimeInterval(10)
@@ -206,7 +236,7 @@ final class SamplePolicyTests: XCTestCase {
         _ state: SampleState,
         _ snapshot: Snapshot,
         idle: TimeInterval,
-        video: Bool,
+        hold: IdleHold = [],
         at time: Date? = nil,
         undo: TimeInterval? = nil
     ) -> (SampleState, SampleAction) {
@@ -216,7 +246,7 @@ final class SamplePolicyTests: XCTestCase {
                 snapshot: snapshot,
                 now: time ?? now,
                 idle: idle,
-                video: video,
+                hold: hold,
                 timeout: timeout,
                 grace: timeout,
                 undoWindow: undo

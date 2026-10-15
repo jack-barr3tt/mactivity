@@ -72,7 +72,7 @@ final class Recorder: @unchecked Sendable {
         watch(pid: observation.pid)
         let timeout = IdleTimeout.timeout
         let idle = Probe.idleSeconds() ?? 0
-        let video = idle >= timeout && Probe.focusedVideoPlaying(bundleID: observation.snapshot.bundleID)
+        let hold: IdleHold = idle >= timeout ? Probe.idleHold(bundleID: observation.snapshot.bundleID) : []
         let wasPending = sampleState.pendingEnd != nil
         let (next, action) = SamplePolicy.step(
             state: sampleState,
@@ -80,7 +80,7 @@ final class Recorder: @unchecked Sendable {
                 snapshot: observation.snapshot,
                 now: Date(),
                 idle: idle,
-                video: video,
+                hold: hold,
                 timeout: timeout,
                 grace: IdleTimeout.grace,
                 undoWindow: IdleNotifier.canUndo ? IdleNotifier.undoWindow : nil

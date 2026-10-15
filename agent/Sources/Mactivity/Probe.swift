@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreMediaIO
 import IOKit
 
 enum Probe {
@@ -48,6 +49,17 @@ enum Probe {
         return TimeInterval(nanos) / 1_000_000_000
     }
 
+    static func idleHold(bundleID: String) -> IdleHold {
+        var hold = IdleHold()
+        if focusedVideoPlaying(bundleID: bundleID) {
+            hold.insert(.focusedVideo)
+        }
+        if cameraInUse() {
+            hold.insert(.camera)
+        }
+        return hold
+    }
+
     static func focusedVideoPlaying(bundleID: String) -> Bool {
         switch bundleID {
         case chromeBundleID:
@@ -82,6 +94,41 @@ enum Probe {
         default:
             return false
         }
+    }
+
+    private static func cameraInUse() -> Bool {
+        var address = CMIOObjectPropertyAddress(
+            mSelector: CMIOObjectPropertySelector(kCMIOHardwarePropertyDevices),
+            mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal),
+            mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain)
+        )
+        var dataSize: UInt32 = 0
+        let system = CMIOObjectID(kCMIOObjectSystemObject)
+        guard CMIOObjectGetPropertyDataSize(system, &address, 0, nil, &dataSize) == noErr, dataSize > 0 else {
+            return false
+        }
+        let count = Int(dataSize) / MemoryLayout<CMIODeviceID>.size
+        var devices = [CMIODeviceID](repeating: 0, count: count)
+        var used: UInt32 = 0
+        let status = devices.withUnsafeMutableBytes { raw in
+            CMIOObjectGetPropertyData(system, &address, 0, nil, dataSize, &used, raw.baseAddress)
+        }
+        guard status == noErr else { return false }
+        let listed = Int(used) / MemoryLayout<CMIODeviceID>.size
+        return devices.prefix(listed).contains(where: deviceIsRunning)
+    }
+
+    private static func deviceIsRunning(_ device: CMIODeviceID) -> Bool {
+        var address = CMIOObjectPropertyAddress(
+            mSelector: CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere),
+            mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeWildcard),
+            mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementWildcard)
+        )
+        var running: UInt32 = 0
+        let size = UInt32(MemoryLayout<UInt32>.size)
+        var used: UInt32 = 0
+        let status = CMIOObjectGetPropertyData(device, &address, 0, nil, size, &used, &running)
+        return status == noErr && running != 0
     }
 
     static func accessibilityTrusted(prompt: Bool) -> Bool {

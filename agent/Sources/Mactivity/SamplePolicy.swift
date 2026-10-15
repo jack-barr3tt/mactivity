@@ -1,8 +1,15 @@
 import Foundation
 
+struct IdleHold: OptionSet, Equatable {
+    let rawValue: UInt8
+
+    static let focusedVideo = IdleHold(rawValue: 1 << 0)
+    static let camera = IdleHold(rawValue: 1 << 1)
+}
+
 struct SampleState: Equatable {
     var open = false
-    var heldForVideo = false
+    var held = false
     var last: Snapshot?
     var pendingEnd: Date?
     var pendingUntil: Date?
@@ -19,7 +26,7 @@ struct SampleInput: Equatable {
     var snapshot: Snapshot
     var now: Date
     var idle: TimeInterval
-    var video: Bool
+    var hold: IdleHold
     var timeout: TimeInterval
     var grace: TimeInterval
     var undoWindow: TimeInterval?
@@ -31,41 +38,41 @@ enum SamplePolicy {
             return stepPending(state, input)
         }
         if input.idle < input.timeout {
-            return recordIfChanged(state, input.snapshot, heldForVideo: false)
+            return recordIfChanged(state, input.snapshot, held: false)
         }
-        if input.video {
-            return recordIfChanged(state, input.snapshot, heldForVideo: true)
+        if !input.hold.isEmpty {
+            return recordIfChanged(state, input.snapshot, held: true)
         }
         guard state.open else {
             var idleState = state
-            idleState.heldForVideo = false
+            idleState.held = false
             return (idleState, .none)
         }
         return beginCutoff(state, input)
     }
 
     private static func stepPending(_ state: SampleState, _ input: SampleInput) -> (SampleState, SampleAction) {
-        if input.idle < input.timeout || input.video {
-            let holding = input.video && input.idle >= input.timeout
-            return recordIfChanged(state, input.snapshot, heldForVideo: holding)
+        if input.idle < input.timeout || !input.hold.isEmpty {
+            let holding = !input.hold.isEmpty && input.idle >= input.timeout
+            return recordIfChanged(state, input.snapshot, held: holding)
         }
         if let until = state.pendingUntil, let end = state.pendingEnd, input.now >= until {
             return (SampleState(), .end(at: end))
         }
         var waiting = state
-        waiting.heldForVideo = false
+        waiting.held = false
         return (waiting, .none)
     }
 
     private static func beginCutoff(_ state: SampleState, _ input: SampleInput) -> (SampleState, SampleAction) {
         let counted = min(input.grace, input.timeout)
-        let end = state.heldForVideo ? input.now : input.now.addingTimeInterval(counted - input.idle)
+        let end = state.held ? input.now : input.now.addingTimeInterval(counted - input.idle)
         guard let window = input.undoWindow else {
             return (SampleState(), .end(at: end))
         }
         var pending = state
         pending.open = true
-        pending.heldForVideo = false
+        pending.held = false
         pending.pendingEnd = end
         pending.pendingUntil = input.now.addingTimeInterval(window)
         return (pending, .notifyIdle(endAt: end))
@@ -74,10 +81,10 @@ enum SamplePolicy {
     private static func recordIfChanged(
         _ state: SampleState,
         _ snapshot: Snapshot,
-        heldForVideo: Bool
+        held: Bool
     ) -> (SampleState, SampleAction) {
         var next = state
-        next.heldForVideo = heldForVideo
+        next.held = held
         next.pendingEnd = nil
         next.pendingUntil = nil
         if state.open && state.last == snapshot {

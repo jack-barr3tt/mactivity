@@ -13,6 +13,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
                 .linkedFramework("FoundationModels"),
+                .linkedFramework("CoreMediaIO"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("UserNotifications"),
             ]
@@ -23,6 +24,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
                 .linkedFramework("FoundationModels"),
+                .linkedFramework("CoreMediaIO"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("UserNotifications"),
             ]
